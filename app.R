@@ -202,6 +202,7 @@ ui <- dashboardPage(skin = "blue", #### Start of UI
                                     box(
                                       title = "Información",
                                       collapsible = TRUE,
+                                      collapsed = TRUE,
                                       width = "100%",
                                       height = "50%",
                                       h4("Elaborado con datos abiertos de: "),
