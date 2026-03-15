@@ -9,16 +9,19 @@ library(purrr)
 library(shiny)
 library(shinydashboard)
 library(tidyverse)
-library(geojsonio)
-library(reshape2)
 library(leaflet)
 library(rgdal)  ### for maps
-library(reshape2) ## Tabla de Graficas
 library(BAMMtools) ## Jenks
 library(DT)
 #  ===== Carga de datos ====
-covid_19 <- read.csv( "200428COVID19MEXICO.csv", sep=",", dec=".", header = T,
-                      colClasses = c(MUNICIPIO_RES = "character"))
+covid_file <- "200428COVID19MEXICO.csv"
+if (!file.exists(covid_file)) {
+  stop("No se encontró el archivo de datos: ", covid_file)
+}
+
+covid_19 <- read.csv(covid_file, sep = ",", dec = ".", header = TRUE,
+                     stringsAsFactors = FALSE,
+                     colClasses = c(MUNICIPIO_RES = "character"))
 qro_s <- readOGR(dsn= ".", layer = "qro_mun")  #### Utilizar path absoluto no relativo
 
 #names(covid_19)
@@ -46,32 +49,38 @@ cod_sex <- function(x){
   else if ( x == 2 ) { x = "HOMBRE"}
   else if ( x == 99 ) {x = "NO ESPECIFICADO"}
   else {x = "MAL CODIFICADO"}
- 
+  return(x)
 }
 #cod_si_no( a)
 
+municipios_qro <- c(
+  "22001" = "AMEALCO DE BONFIL",
+  "22002" = "PINAL DE AMOLES",
+  "22003" = "ARROYO SECO",
+  "22004" = "CADEREYTA DE MONTES",
+  "22005" = "COLÓN",
+  "22006" = "CORREGIDORA",
+  "22007" = "EZEQUIEL MONTES",
+  "22008" = "HUIMILPAN",
+  "22009" = "JALPAN DE SERRA",
+  "22010" = "LANDA DE MATAMOROS",
+  "22011" = "EL MARQUÉS",
+  "22012" = "PEDRO ESCOBEDO",
+  "22013" = "PEÑAMILLER",
+  "22014" = "QUERÉTARO",
+  "22015" = "SAN JOAQUÍN",
+  "22016" = "SAN JUAN DEL RÍO",
+  "22017" = "TEQUISQUIAPAN",
+  "22018" = "TOLIMÁN",
+  "999" = "NO ESPECIFICADO"
+)
+
 cod_mpio <- function(x){
-  if ( x == "22001" ) { x = "AMEALCO DE BONFIL"}
-  else if ( x == "22002" ) { x = "PINAL DE AMOLES"}
-  else if ( x == "22003" ) { x = "ARROYO SECO"}
-  else if ( x == "22004" ) { x = "CADEREYTA DE MONTES"}
-  else if ( x == "22005" ) { x = "COLÓN"}
-  else if ( x == "22006" ) { x = "CORREGIDORA"}
-  else if ( x == "22007" ) { x = "EZEQUIEL MONTES"}
-  else if ( x == "22008" ) { x = "HUIMILPAN"}
-  else if ( x == "22009" ) { x = "JALPAN DE SERRA"}
-  else if ( x == "22010" ) { x = "LANDA DE MATAMOROS"}
-  else if ( x == "22011" ) { x = "EL MARQUÉS"}
-  else if ( x == "22012" ) { x = "PEDRO ESCOBEDO"}
-  else if ( x == "22013" ) { x = "PEÑAMILLER"}
-  else if ( x == "22014" ) { x = "QUERÉTARO"}
-  else if ( x == "22015" ) { x = "SAN JOAQUÍN"}
-  else if ( x == "22016" ) { x = "SAN JUAN DEL RÍO"}
-  else if ( x == "22017" ) { x = "TEQUISQUIAPAN"}
-  else if ( x == "22018" ) { x = "TOLIMÁN"}
-  else if ( x == "999" ) { x = "NO ESPECIFICADO"}
-  else {x = "FORÁNEO"}
-  return(x)
+  x_chr <- as.character(x)
+  if (x_chr %in% names(municipios_qro)) {
+    return(unname(municipios_qro[[x_chr]]))
+  }
+  return("FORÁNEO")
 }
 
 ## Edades
@@ -120,7 +129,10 @@ Tipo_list <- c("Positivos", "Negativos", "Sospechosos")
         # Value boxes general ====
 x_boxinfo <- c_19_qro %>%  group_by(RESULTADO) %>%  summarise( total = sum(total) )
 x_boxinfo <- x_boxinfo %>% mutate(RESULTADO = map_chr(RESULTADO, cod_res))
-falle <- c_19_qro %>% filter(FECHA_DEF != "9999-99-99" & RESULTADO == 1) %>% summarise( sum(total))
+falle <- c_19_qro %>%
+  filter(FECHA_DEF != "9999-99-99" & RESULTADO == 1) %>%
+  summarise(defunciones = sum(total)) %>%
+  pull(defunciones)
  
   # Positivos general y agrega rango edad y cod sexo ====
 x_pos <- c_19_qro %>% filter (RESULTADO == 1) %>% 
@@ -346,8 +358,10 @@ server <- function(input, output) {
                                Cardiovascular = sum(CARDIOV),
                                Tabaquismo =sum(TABAQ), 
                                Hipertesión = sum(HIPERT))
-    G2_D <- gather( G2_D)
-    G2_D <- G2_D %>% mutate( Porcentaje = round(value/ nrow(data_tipo() ) * 100, 2) )
+    G2_D <- gather(G2_D)
+    total_registros <- nrow(data_tipo())
+    G2_D <- G2_D %>% mutate(Porcentaje = ifelse(total_registros == 0, 0,
+                                                round(value / total_registros * 100, 2)))
     
     ggplot(data=G2_D, aes(x=key, y=Porcentaje , fill  = Porcentaje)) + ylim(0,100) +
       geom_bar(stat="identity") + coord_polar() +
